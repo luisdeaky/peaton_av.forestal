@@ -6,82 +6,85 @@
     <title>GeoPeatón Forestal</title>
     <link rel="stylesheet" href="https://unpkg.com" />
     <style>
-        body { margin: 0; padding: 0; font-family: sans-serif; }
-        #map { height: 100vh; width: 100vw; }
+        /* Aseguramos que el mapa sea visible desde el segundo 1 */
+        html, body, #map { height: 100%; width: 100%; margin: 0; padding: 0; background-color: #f0f0f0; }
+        
         #status-bar { 
-            position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
-            z-index: 1000; background: rgba(255,255,255,0.9); padding: 10px;
-            border-radius: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-            font-size: 14px; pointer-events: none;
+            position: absolute; top: 10px; left: 10px; right: 10px;
+            z-index: 1000; background: white; padding: 10px;
+            border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            text-align: center; font-size: 13px;
         }
     </style>
 </head>
 <body>
 
-<div id="status-bar">Escaneando ubicación...</div>
+<div id="status-bar">🛰️ Buscando GPS... camina unos pasos.</div>
 <div id="map"></div>
 
-<script src="https://unpkg.com"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-    // Configuración Inicial
-    const map = L.map('map').setView([-24.238, -65.257], 15); // Centro aprox Av. Forestal
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-
-    // Íconos
-    const userIcon = L.divIcon({className: 'user-pos', html: '<div style="background:blue; width:12px; height:12px; border-radius:50%; border:2px solid white;"></div>'});
-    let userMarker = L.marker([0,0], {icon: userIcon}).addTo(map);
-
-    // 1. PUNTOS DE INTERÉS (Solo nombre)
-    const pois = [
-        { name: "Hospital Snopek", coords: [-24.2405, -65.2588] },
-        { name: "Delegación Municipal", coords: [-24.2372, -65.2535] },
-        { name: "Registro Civil", coords: [-24.2390, -65.2560] }
-    ];
-
-    pois.forEach(poi => {
-        L.marker(poi.coords).addTo(map).bindPopup(`<b>${poi.name}</b>`);
+    // 1. Iniciamos el mapa en un punto fijo de la Av. Forestal para evitar el blanco inicial
+    const map = L.map('map', {
+        center: [-24.238, -65.257],
+        zoom: 15,
+        zoomControl: false // Opcional para vista limpia en móvil
     });
 
-    // 2. CRUCES PELIGROSOS (Para vibración)
-    const dangerZones = [
-        { name: "Cruce Av. Snopek - ¡Atención Peatón!", coords: [-24.2401, -65.2592] }
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+    // Marcador azul para el usuario
+    const userMarker = L.circleMarker([-24.238, -65.257], {
+        radius: 9, color: 'white', fillColor: '#007bff', fillOpacity: 1, weight: 3
+    }).addTo(map);
+
+    // Puntos de interés (POIs)
+    const points = [
+        { n: "Hospital Snopek", c: [-24.2405, -65.2588] },
+        { n: "Delegación Municipal", c: [-24.2372, -65.2535] },
+        { n: "Registro Civil", c: [-24.2390, -65.2560] }
+    ];
+    points.forEach(p => L.marker(p.c).addTo(map).bindPopup(p.n));
+
+    // 2. Cruces de alerta (Vibración + Mensaje)
+    const dangerCrossings = [
+        { name: "¡CUIDADO! Cruce Av. Snopek", coords: [-24.2401, -65.2592] }
     ];
 
-    // 3. SEGUIMIENTO GPS EN TIEMPO REAL
-    if ("geolocation" in navigator) {
-        navigator.geolocation.watchPosition(position => {
-            const lat = position.coords.latitude;
-            const lng = position.coords.longitude;
-            const userCoords = L.latLng(lat, lng);
-
-            userMarker.setLatLng(userCoords);
-            map.panTo(userCoords);
-            document.getElementById('status-bar').innerText = "En recorrido por Av. Forestal";
-
-            // Lógica de Proximidad y Vibración
-            dangerZones.forEach(zone => {
-                const zoneLatLng = L.latLng(zone.coords);
-                const distance = userCoords.distanceTo(zoneLatLng);
-
-                if (distance < 30) { // Radio de 30 metros
-                    if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
-                    alert(zone.name); 
-                }
-            });
-
-        }, error => {
-            console.error(error);
-            document.getElementById('status-bar').innerText = "Error de GPS: Activa la ubicación";
-        }, { enableHighAccuracy: true });
+    // 3. Función de seguimiento mejorada
+    function onLocationFound(e) {
+        const userPos = e.latlng;
+        userMarker.setLatLng(userPos);
+        map.panTo(userPos); // El mapa te sigue suavemente
+        document.getElementById('status-bar').innerText = "✅ Recorrido Forestal Activo";
+        
+        // Verificar proximidad a cruces
+        dangerCrossings.forEach(cross => {
+            if (userPos.distanceTo(L.latLng(cross.coords)) < 35) {
+                if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+                document.getElementById('status-bar').style.background = "#ffcccc";
+                document.getElementById('status-bar').innerText = "⚠️ " + cross.name;
+            } else {
+                document.getElementById('status-bar').style.background = "white";
+            }
+        });
     }
 
-    // Trazado visual de la ciclovía (Línea indicativa)
-    const forestalRoute = [
-        [-24.2450, -65.2650], // Colectora 66 (Aprox)
-        [-24.2350, -65.2500]  // Hacia Ruta 9
-    ];
-    L.polyline(forestalRoute, {color: 'green', weight: 5, opacity: 0.6}).addTo(map);
+    function onLocationError(e) {
+        document.getElementById('status-bar').innerText = "⚠️ Error: Activa el GPS y refresca";
+    }
+
+    // Configuración para móvil
+    map.on('locationfound', onLocationFound);
+    map.on('locationerror', onLocationError);
+
+    // Forzamos al GPS a buscarte constantemente
+    map.locate({ setView: true, watch: true, enableHighAccuracy: true });
+
+    // Truco para arreglar el renderizado en móviles (el famoso mapa gris/blanco)
+    setTimeout(() => { map.invalidateSize(); }, 500);
 
 </script>
 </body>
 </html>
+
