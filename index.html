@@ -6,85 +6,104 @@
     <title>GeoPeatón Forestal</title>
     <link rel="stylesheet" href="https://unpkg.com" />
     <style>
-        /* Aseguramos que el mapa sea visible desde el segundo 1 */
-        html, body, #map { height: 100%; width: 100%; margin: 0; padding: 0; background-color: #f0f0f0; }
-        
+        /* Solución para mapa cortado: usamos vh (view height) */
+        html, body { 
+            height: 100%; 
+            margin: 0; 
+            padding: 0; 
+            overflow: hidden; /* Evita que la pantalla se mueva */
+        }
+        #map { 
+            height: 100vh; /* Fuerza al mapa a ocupar toda la altura del dispositivo */
+            width: 100vw; 
+            background: #e5e3df; 
+        }
         #status-bar { 
-            position: absolute; top: 10px; left: 10px; right: 10px;
-            z-index: 1000; background: white; padding: 10px;
-            border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-            text-align: center; font-size: 13px;
+            position: absolute; 
+            top: 10px; 
+            left: 10px; 
+            right: 10px;
+            z-index: 1000; 
+            background: white; 
+            padding: 12px;
+            border-radius: 12px; 
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            text-align: center; 
+            font-size: 14px;
+            font-weight: bold;
+            border: 2px solid #007bff;
         }
     </style>
 </head>
 <body>
 
-<div id="status-bar">🛰️ Buscando GPS... camina unos pasos.</div>
+<div id="status-bar">🛰️ Iniciando mapa...</div>
 <div id="map"></div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com"></script>
 <script>
-    // 1. Iniciamos el mapa en un punto fijo de la Av. Forestal para evitar el blanco inicial
+    // Centro inicial: Av. Forestal y Snopek
+    const forestalCenter = [-24.238, -65.257];
     const map = L.map('map', {
-        center: [-24.238, -65.257],
-        zoom: 15,
-        zoomControl: false // Opcional para vista limpia en móvil
+        center: forestalCenter,
+        zoom: 16,
+        zoomControl: false // Limpiamos la pantalla de botones
     });
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-
-    // Marcador azul para el usuario
-    const userMarker = L.circleMarker([-24.238, -65.257], {
-        radius: 9, color: 'white', fillColor: '#007bff', fillOpacity: 1, weight: 3
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap'
     }).addTo(map);
 
-    // Puntos de interés (POIs)
-    const points = [
-        { n: "Hospital Snopek", c: [-24.2405, -65.2588] },
-        { n: "Delegación Municipal", c: [-24.2372, -65.2535] },
-        { n: "Registro Civil", c: [-24.2390, -65.2560] }
-    ];
-    points.forEach(p => L.marker(p.c).addTo(map).bindPopup(p.n));
+    // Marcador del usuario
+    const userMarker = L.circleMarker(forestalCenter, {
+        radius: 10, color: 'white', fillColor: '#007bff', fillOpacity: 1, weight: 3
+    }).addTo(map);
 
-    // 2. Cruces de alerta (Vibración + Mensaje)
-    const dangerCrossings = [
+    // Puntos de Interés
+    const pois = [
+        { name: "Hospital Snopek", coords: [-24.2405, -65.2588] },
+        { name: "Delegación Municipal", coords: [-24.2372, -65.2535] },
+        { name: "Registro Civil", coords: [-24.2390, -65.2560] }
+    ];
+    pois.forEach(p => L.marker(p.coords).addTo(map).bindPopup(p.name));
+
+    // Cruce Peligroso
+    const crossings = [
         { name: "¡CUIDADO! Cruce Av. Snopek", coords: [-24.2401, -65.2592] }
     ];
 
-    // 3. Función de seguimiento mejorada
     function onLocationFound(e) {
-        const userPos = e.latlng;
-        userMarker.setLatLng(userPos);
-        map.panTo(userPos); // El mapa te sigue suavemente
-        document.getElementById('status-bar').innerText = "✅ Recorrido Forestal Activo";
-        
-        // Verificar proximidad a cruces
-        dangerCrossings.forEach(cross => {
-            if (userPos.distanceTo(L.latLng(cross.coords)) < 35) {
+        userMarker.setLatLng(e.latlng);
+        map.setView(e.latlng); // El mapa se centra en vos
+        document.getElementById('status-bar').innerText = "✅ Ubicación en tiempo real activa";
+        document.getElementById('status-bar').style.borderColor = "#28a745";
+
+        crossings.forEach(c => {
+            if (e.latlng.distanceTo(L.latLng(c.coords)) < 40) {
                 if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
-                document.getElementById('status-bar').style.background = "#ffcccc";
-                document.getElementById('status-bar').innerText = "⚠️ " + cross.name;
-            } else {
-                document.getElementById('status-bar').style.background = "white";
+                document.getElementById('status-bar').innerText = "⚠️ " + c.name;
+                document.getElementById('status-bar').style.background = "#ffeb3b";
             }
         });
     }
 
     function onLocationError(e) {
-        document.getElementById('status-bar').innerText = "⚠️ Error: Activa el GPS y refresca";
+        document.getElementById('status-bar').innerText = "⚠️ Error: Activa GPS y da permiso";
+        document.getElementById('status-bar').style.borderColor = "red";
     }
 
-    // Configuración para móvil
     map.on('locationfound', onLocationFound);
     map.on('locationerror', onLocationError);
 
-    // Forzamos al GPS a buscarte constantemente
-    map.locate({ setView: true, watch: true, enableHighAccuracy: true });
+    // Configuramos para que no falle si la señal es débil
+    map.locate({ setView: true, watch: true, enableHighAccuracy: false });
 
-    // Truco para arreglar el renderizado en móviles (el famoso mapa gris/blanco)
-    setTimeout(() => { map.invalidateSize(); }, 500);
-
+    // REPARACIÓN FINAL: Forzamos el redibujado del mapa tras cargar
+    window.addEventListener('load', () => {
+        setTimeout(() => { map.invalidateSize(); }, 500);
+    });
 </script>
 </body>
 </html>
+
 
