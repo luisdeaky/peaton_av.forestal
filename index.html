@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>GeoPeatón Forestal</title>
+    <link rel="stylesheet" href="https://unpkg.com" />
+    <style>
+        body { margin: 0; padding: 0; font-family: sans-serif; }
+        #map { height: 100vh; width: 100vw; }
+        #status-bar { 
+            position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+            z-index: 1000; background: rgba(255,255,255,0.9); padding: 10px;
+            border-radius: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            font-size: 14px; pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+<div id="status-bar">Escaneando ubicación...</div>
+<div id="map"></div>
+
+<script src="https://unpkg.com"></script>
+<script>
+    // Configuración Inicial
+    const map = L.map('map').setView([-24.238, -65.257], 15); // Centro aprox Av. Forestal
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+    // Íconos
+    const userIcon = L.divIcon({className: 'user-pos', html: '<div style="background:blue; width:12px; height:12px; border-radius:50%; border:2px solid white;"></div>'});
+    let userMarker = L.marker([0,0], {icon: userIcon}).addTo(map);
+
+    // 1. PUNTOS DE INTERÉS (Solo nombre)
+    const pois = [
+        { name: "Hospital Snopek", coords: [-24.2405, -65.2588] },
+        { name: "Delegación Municipal", coords: [-24.2372, -65.2535] },
+        { name: "Registro Civil", coords: [-24.2390, -65.2560] }
+    ];
+
+    pois.forEach(poi => {
+        L.marker(poi.coords).addTo(map).bindPopup(`<b>${poi.name}</b>`);
+    });
+
+    // 2. CRUCES PELIGROSOS (Para vibración)
+    const dangerZones = [
+        { name: "Cruce Av. Snopek - ¡Atención Peatón!", coords: [-24.2401, -65.2592] }
+    ];
+
+    // 3. SEGUIMIENTO GPS EN TIEMPO REAL
+    if ("geolocation" in navigator) {
+        navigator.geolocation.watchPosition(position => {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+            const userCoords = L.latLng(lat, lng);
+
+            userMarker.setLatLng(userCoords);
+            map.panTo(userCoords);
+            document.getElementById('status-bar').innerText = "En recorrido por Av. Forestal";
+
+            // Lógica de Proximidad y Vibración
+            dangerZones.forEach(zone => {
+                const zoneLatLng = L.latLng(zone.coords);
+                const distance = userCoords.distanceTo(zoneLatLng);
+
+                if (distance < 30) { // Radio de 30 metros
+                    if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+                    alert(zone.name); 
+                }
+            });
+
+        }, error => {
+            console.error(error);
+            document.getElementById('status-bar').innerText = "Error de GPS: Activa la ubicación";
+        }, { enableHighAccuracy: true });
+    }
+
+    // Trazado visual de la ciclovía (Línea indicativa)
+    const forestalRoute = [
+        [-24.2450, -65.2650], // Colectora 66 (Aprox)
+        [-24.2350, -65.2500]  // Hacia Ruta 9
+    ];
+    L.polyline(forestalRoute, {color: 'green', weight: 5, opacity: 0.6}).addTo(map);
+
+</script>
+</body>
+</html>
