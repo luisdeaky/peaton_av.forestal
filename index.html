@@ -3,107 +3,97 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>GeoPeatón Forestal</title>
+    <title>Forestal Go</title>
+    <!-- Cargamos Leaflet desde HTTPS siempre -->
     <link rel="stylesheet" href="https://unpkg.com" />
     <style>
-        /* Solución para mapa cortado: usamos vh (view height) */
-        html, body { 
-            height: 100%; 
-            margin: 0; 
-            padding: 0; 
-            overflow: hidden; /* Evita que la pantalla se mueva */
+        :root { --uber-black: #000000; --uber-blue: #276ef1; }
+        html, body { height: 100%; margin: 0; padding: 0; font-family: sans-serif; background: #eee; overflow: hidden; }
+        
+        #map { height: 100%; width: 100%; position: absolute; top: 0; bottom: 0; z-index: 1; }
+
+        #header-status {
+            position: absolute; top: 20px; left: 15px; right: 15px; z-index: 1000;
+            background: var(--uber-black); color: white; padding: 15px;
+            border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            font-size: 14px; text-align: center; font-weight: bold;
         }
-        #map { 
-            height: 100vh; /* Fuerza al mapa a ocupar toda la altura del dispositivo */
-            width: 100vw; 
-            background: #e5e3df; 
+
+        #info-card {
+            position: absolute; bottom: 0; left: 0; right: 0; z-index: 1000;
+            background: white; padding: 20px;
+            border-top-left-radius: 20px; border-top-right-radius: 20px;
+            box-shadow: 0 -5px 15px rgba(0,0,0,0.1);
         }
-        #status-bar { 
-            position: absolute; 
-            top: 10px; 
-            left: 10px; 
-            right: 10px;
-            z-index: 1000; 
-            background: white; 
-            padding: 12px;
-            border-radius: 12px; 
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-            text-align: center; 
-            font-size: 14px;
-            font-weight: bold;
-            border: 2px solid #007bff;
-        }
+        
+        .poi-name { font-size: 18px; font-weight: bold; color: black; margin-bottom: 5px; }
+        .user-dot { width: 14px; height: 14px; background: var(--uber-blue); border: 3px solid white; border-radius: 50%; box-shadow: 0 0 8px rgba(0,0,0,0.3); }
     </style>
 </head>
 <body>
 
-<div id="status-bar">🛰️ Iniciando mapa...</div>
+<div id="header-status">📍 Iniciando Forestal Go...</div>
 <div id="map"></div>
+
+<div id="info-card">
+    <div style="font-size: 11px; color: #666; text-transform: uppercase;">Lugar de interés cercano</div>
+    <div id="current-poi" class="poi-name">Buscando...</div>
+    <div id="dist-val" style="font-size: 14px; color: #444;">-- metros</div>
+</div>
 
 <script src="https://unpkg.com"></script>
 <script>
-    // Centro inicial: Av. Forestal y Snopek
-    const forestalCenter = [-24.238, -65.257];
-    const map = L.map('map', {
-        center: forestalCenter,
-        zoom: 16,
-        zoomControl: false // Limpiamos la pantalla de botones
-    });
-
+    // 1. Cambiamos el proveedor a OpenStreetMap (más compatible con HTTPS)
+    const map = L.map('map', { zoomControl: false }).setView([-24.238, -65.257], 15);
+    
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap'
     }).addTo(map);
 
-    // Marcador del usuario
-    const userMarker = L.circleMarker(forestalCenter, {
-        radius: 10, color: 'white', fillColor: '#007bff', fillOpacity: 1, weight: 3
-    }).addTo(map);
+    const userIcon = L.divIcon({ className: 'custom-div-icon', html: "<div class='user-dot'></div>", iconSize: });
+    let userMarker = L.marker([-24.238, -65.257], {icon: userIcon}).addTo(map);
 
-    // Puntos de Interés
     const pois = [
         { name: "Hospital Snopek", coords: [-24.2405, -65.2588] },
         { name: "Delegación Municipal", coords: [-24.2372, -65.2535] },
-        { name: "Registro Civil", coords: [-24.2390, -65.2560] }
-    ];
-    pois.forEach(p => L.marker(p.coords).addTo(map).bindPopup(p.name));
-
-    // Cruce Peligroso
-    const crossings = [
-        { name: "¡CUIDADO! Cruce Av. Snopek", coords: [-24.2401, -65.2592] }
+        { name: "Cruce Av. Snopek", coords: [-24.2401, -65.2592], danger: true }
     ];
 
     function onLocationFound(e) {
         userMarker.setLatLng(e.latlng);
-        map.setView(e.latlng); // El mapa se centra en vos
-        document.getElementById('status-bar').innerText = "✅ Ubicación en tiempo real activa";
-        document.getElementById('status-bar').style.borderColor = "#28a745";
+        map.panTo(e.latlng);
+        document.getElementById('header-status').innerText = "✅ Recorrido Activo";
 
-        crossings.forEach(c => {
-            if (e.latlng.distanceTo(L.latLng(c.coords)) < 40) {
-                if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
-                document.getElementById('status-bar').innerText = "⚠️ " + c.name;
-                document.getElementById('status-bar').style.background = "#ffeb3b";
+        let closest = pois;
+        let minDist = 9999;
+
+        pois.forEach(p => {
+            let d = e.latlng.distanceTo(L.latLng(p.coords));
+            if(d < minDist) { minDist = d; closest = p; }
+            if(p.danger && d < 35) {
+                if(navigator.vibrate) navigator.vibrate(300);
+                document.getElementById('header-status').style.background = "#e63946";
+                document.getElementById('header-status').innerText = "⚠️ " + p.name;
             }
         });
-    }
 
-    function onLocationError(e) {
-        document.getElementById('status-bar').innerText = "⚠️ Error: Activa GPS y da permiso";
-        document.getElementById('status-bar').style.borderColor = "red";
+        document.getElementById('current-poi').innerText = closest.name;
+        document.getElementById('dist-val').innerText = Math.round(minDist) + " metros";
     }
 
     map.on('locationfound', onLocationFound);
-    map.on('locationerror', onLocationError);
-
-    // Configuramos para que no falle si la señal es débil
-    map.locate({ setView: true, watch: true, enableHighAccuracy: false });
-
-    // REPARACIÓN FINAL: Forzamos el redibujado del mapa tras cargar
-    window.addEventListener('load', () => {
-        setTimeout(() => { map.invalidateSize(); }, 500);
+    map.on('locationerror', () => {
+        document.getElementById('header-status').innerText = "❌ Error: Activa el GPS";
     });
+
+    // Forzamos el inicio del GPS
+    map.locate({setView: true, watch: true, enableHighAccuracy: false});
+
+    // REPARACIÓN DE PANTALLA BLANCA: Forzar redibujado
+    setTimeout(() => { map.invalidateSize(); }, 800);
 </script>
 </body>
 </html>
+
 
 
